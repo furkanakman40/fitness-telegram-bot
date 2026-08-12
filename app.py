@@ -1,6 +1,11 @@
 import os
 from datetime import datetime, timezone, timedelta
+import secrets
+import json
 
+from fastapi import Depends, HTTPException, status
+from fastapi.responses import HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi import FastAPI
 from telegram import Update
 from telegram.ext import Application, CommandHandler
@@ -16,7 +21,33 @@ app = FastAPI()
 telegram_app = Application.builder().token(TOKEN).build()
 
 TR_TIMEZONE = timezone(timedelta(hours=3))
+security = HTTPBasic()
 
+DASHBOARD_USER = os.environ["DASHBOARD_USER"]
+DASHBOARD_PASSWORD = os.environ["DASHBOARD_PASSWORD"]
+
+
+def dashboard_auth(
+    credentials: HTTPBasicCredentials = Depends(security)
+):
+    username_ok = secrets.compare_digest(
+        credentials.username,
+        DASHBOARD_USER
+    )
+
+    password_ok = secrets.compare_digest(
+        credentials.password,
+        DASHBOARD_PASSWORD
+    )
+
+    if not (username_ok and password_ok):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Yetkisiz erişim",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    return credentials.username
 
 def today():
     return datetime.now(TR_TIMEZONE).date().isoformat()
