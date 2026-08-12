@@ -2,7 +2,7 @@ import os
 from datetime import datetime, timezone, timedelta
 import secrets
 import json
-
+from fastapi.responses import HTMLResponse
 from fastapi import Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -485,3 +485,107 @@ async def home():
         "service": "Furkan AI Trainer",
         "database": "Supabase"
     }
+@app.get("/dashboard")
+async def dashboard():
+    return HTMLResponse("""
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Furkan AI Trainer</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: white;
+            margin: 0;
+            padding: 30px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: auto;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        .sub {
+            color: #94a3b8;
+            margin-bottom: 30px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+
+        .card {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 15px;
+        }
+
+        .title {
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        .value {
+            font-size: 27px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h1>🏋️ Furkan AI Trainer</h1>
+    <div class="sub">Fitness Dashboard</div>
+
+    <div class="grid">
+
+        <div class="card">
+            <div class="title">⚖️ Güncel Kilo</div>
+            <div class="value">124 kg</div>
+        </div>
+
+        <div class="card">
+            <div class="title">🎯 Hedef Kilo</div>
+            <div class="value">90 kg</div>
+        </div>
+
+        <div class="card">
+            <div class="title">🔥 Günlük Kalori</div>
+            <div class="value">2400 kcal</div>
+        </div>
+
+        <div class="card">
+            <div class="title">🥩 Protein</div>
+            <div class="value">190 g</div>
+        </div>
+
+        <div class="card">
+            <div class="title">💧 Su</div>
+            <div class="value">3.5 L</div>
+        </div>
+
+        <div class="card">
+            <div class="title">🚶 Adım</div>
+            <div class="value">8000</div>
+        </div>
+
+    </div>
+
+</div>
+
+</body>
+</html>
+""")
