@@ -6,11 +6,6 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler
 from supabase import create_client
 
-
-# =========================================
-# AYARLAR
-# =========================================
-
 TOKEN = os.environ["BOT_TOKEN"]
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
@@ -18,19 +13,10 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI()
-
-telegram_app = (
-    Application.builder()
-    .token(TOKEN)
-    .build()
-)
+telegram_app = Application.builder().token(TOKEN).build()
 
 TR_TIMEZONE = timezone(timedelta(hours=3))
 
-
-# =========================================
-# YARDIMCI FONKSİYONLAR
-# =========================================
 
 def today():
     return datetime.now(TR_TIMEZONE).date().isoformat()
@@ -42,8 +28,7 @@ def now_utc():
 
 def get_or_create_user(tg_user):
     result = (
-        supabase
-        .table("profiles")
+        supabase.table("profiles")
         .select("id")
         .eq("telegram_user_id", tg_user.id)
         .limit(1)
@@ -54,8 +39,7 @@ def get_or_create_user(tg_user):
         return result.data[0]["id"]
 
     result = (
-        supabase
-        .table("profiles")
+        supabase.table("profiles")
         .insert({
             "telegram_user_id": tg_user.id,
             "telegram_username": tg_user.username,
@@ -70,8 +54,7 @@ def get_or_create_user(tg_user):
 
 def get_daily_log(user_id):
     return (
-        supabase
-        .table("daily_logs")
+        supabase.table("daily_logs")
         .select("*")
         .eq("user_id", user_id)
         .eq("log_date", today())
@@ -80,13 +63,24 @@ def get_daily_log(user_id):
     )
 
 
+def get_goals(user_id):
+    result = (
+        supabase.table("goals")
+        .select("*")
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+
+    return result.data[0] if result.data else {}
+
+
 def update_daily_value(user_id, field, value):
     existing = get_daily_log(user_id)
 
     if existing.data:
         (
-            supabase
-            .table("daily_logs")
+            supabase.table("daily_logs")
             .update({
                 field: value,
                 "updated_at": now_utc()
@@ -96,8 +90,7 @@ def update_daily_value(user_id, field, value):
         )
     else:
         (
-            supabase
-            .table("daily_logs")
+            supabase.table("daily_logs")
             .insert({
                 "user_id": user_id,
                 "log_date": today(),
@@ -107,32 +100,11 @@ def update_daily_value(user_id, field, value):
         )
 
 
-# =========================================
-# TEMEL KOMUTLAR
-# =========================================
-
 async def start(update: Update, context):
     get_or_create_user(update.effective_user)
 
     await update.message.reply_text(
         "🏋️ Furkan AI Trainer aktif!\n\n"
-        "Günlük takip komutların:\n\n"
-        "⚖️ /kilo 124\n"
-        "🔥 /kalori 2200\n"
-        "🥩 /protein 180\n"
-        "💧 /su 2.5\n"
-        "🚶 /adim 7500\n"
-        "📏 /bel 118\n"
-        "🫁 /gogus 125\n"
-        "🏋️ /antrenman Push 60\n"
-        "📊 /bugun\n\n"
-        "/help ile tüm komutları görebilirsin."
-    )
-
-
-async def help_command(update: Update, context):
-    await update.message.reply_text(
-        "📋 KOMUTLAR\n\n"
         "/kilo 124\n"
         "/kalori 2200\n"
         "/protein 180\n"
@@ -140,373 +112,298 @@ async def help_command(update: Update, context):
         "/adim 7500\n"
         "/bel 118\n"
         "/gogus 125\n"
-        "/antrenman Push 60\n"
-        "/bugun\n"
-        "/test"
+        "/antrenman Push 60\n\n"
+        "📊 /bugun\n"
+        "🎯 /hedef\n"
+        "📈 /hafta"
     )
+
+
+async def help_command(update: Update, context):
+    await start(update, context)
 
 
 async def test_command(update: Update, context):
     try:
         user_id = get_or_create_user(update.effective_user)
+        get_goals(user_id)
 
         await update.message.reply_text(
             "🟢 SİSTEM ÇALIŞIYOR!\n\n"
             "Telegram: ✅\n"
             "Render: ✅\n"
             "Supabase: ✅\n"
-            f"Profil ID: {str(user_id)[:8]}..."
+            "Hedef sistemi: ✅"
         )
 
     except Exception as e:
         print("TEST ERROR:", e)
+        await update.message.reply_text("🔴 Sistem testinde hata oluştu.")
 
-        await update.message.reply_text(
-            "🔴 Sistem testinde hata oluştu."
-        )
-
-
-# =========================================
-# GÜNLÜK VERİ KOMUTLARI
-# =========================================
 
 async def kilo_command(update: Update, context):
-    if not context.args:
-        await update.message.reply_text(
-            "Kullanım: /kilo 123.5"
-        )
-        return
-
     try:
-        weight = float(context.args[0].replace(",", "."))
-
-        if not 30 <= weight <= 350:
+        value = float(context.args[0].replace(",", "."))
+        if not 30 <= value <= 350:
             raise ValueError
 
         user_id = get_or_create_user(update.effective_user)
-        update_daily_value(user_id, "weight_kg", weight)
+        update_daily_value(user_id, "weight_kg", value)
 
         await update.message.reply_text(
-            f"✅ Kilon {weight:g} kg olarak kaydedildi."
+            f"✅ Kilo: {value:g} kg kaydedildi."
         )
 
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ Örnek kullanım: /kilo 123.5"
-        )
+    except (ValueError, IndexError):
+        await update.message.reply_text("⚠️ Kullanım: /kilo 123.5")
 
 
 async def kalori_command(update: Update, context):
-    if not context.args:
-        await update.message.reply_text(
-            "Kullanım: /kalori 2200"
-        )
-        return
-
     try:
-        calories = int(context.args[0])
-
-        if not 0 <= calories <= 10000:
+        value = int(context.args[0])
+        if not 0 <= value <= 10000:
             raise ValueError
 
         user_id = get_or_create_user(update.effective_user)
-        update_daily_value(user_id, "calories", calories)
+        update_daily_value(user_id, "calories", value)
 
         await update.message.reply_text(
-            f"✅ Kalori {calories} kcal olarak kaydedildi."
+            f"✅ Kalori: {value} kcal kaydedildi."
         )
 
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ Örnek kullanım: /kalori 2200"
-        )
+    except (ValueError, IndexError):
+        await update.message.reply_text("⚠️ Kullanım: /kalori 2200")
 
 
 async def protein_command(update: Update, context):
-    if not context.args:
-        await update.message.reply_text(
-            "Kullanım: /protein 180"
-        )
-        return
-
     try:
-        protein = float(context.args[0].replace(",", "."))
-
-        if not 0 <= protein <= 500:
+        value = float(context.args[0].replace(",", "."))
+        if not 0 <= value <= 500:
             raise ValueError
 
         user_id = get_or_create_user(update.effective_user)
-        update_daily_value(user_id, "protein_g", protein)
+        update_daily_value(user_id, "protein_g", value)
 
         await update.message.reply_text(
-            f"✅ Protein {protein:g} g olarak kaydedildi."
+            f"✅ Protein: {value:g} g kaydedildi."
         )
 
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ Örnek kullanım: /protein 180"
-        )
+    except (ValueError, IndexError):
+        await update.message.reply_text("⚠️ Kullanım: /protein 190")
 
 
 async def su_command(update: Update, context):
-    if not context.args:
-        await update.message.reply_text(
-            "Kullanım: /su 2.5"
-        )
-        return
-
     try:
-        water = float(context.args[0].replace(",", "."))
-
-        if not 0 <= water <= 15:
+        value = float(context.args[0].replace(",", "."))
+        if not 0 <= value <= 15:
             raise ValueError
 
         user_id = get_or_create_user(update.effective_user)
-        update_daily_value(user_id, "water_l", water)
+        update_daily_value(user_id, "water_l", value)
 
         await update.message.reply_text(
-            f"✅ Su {water:g} L olarak kaydedildi."
+            f"✅ Su: {value:g} L kaydedildi."
         )
 
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ Örnek kullanım: /su 2.5"
-        )
+    except (ValueError, IndexError):
+        await update.message.reply_text("⚠️ Kullanım: /su 3.5")
 
 
 async def adim_command(update: Update, context):
-    if not context.args:
-        await update.message.reply_text(
-            "Kullanım: /adim 7500"
-        )
-        return
-
     try:
-        steps = int(context.args[0])
-
-        if not 0 <= steps <= 100000:
+        value = int(context.args[0])
+        if not 0 <= value <= 100000:
             raise ValueError
 
         user_id = get_or_create_user(update.effective_user)
-        update_daily_value(user_id, "steps", steps)
+        update_daily_value(user_id, "steps", value)
 
         await update.message.reply_text(
-            f"✅ {steps} adım olarak kaydedildi."
+            f"✅ Adım: {value} kaydedildi."
         )
 
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ Örnek kullanım: /adim 7500"
-        )
-
-
-# =========================================
-# ÖLÇÜM KOMUTLARI
-# =========================================
-
-async def save_measurement(update, field, label):
-    if not update.message:
-        return
-
-    context = update._bot_data_context if False else None
+    except (ValueError, IndexError):
+        await update.message.reply_text("⚠️ Kullanım: /adim 8000")
 
 
 async def bel_command(update: Update, context):
-    if not context.args:
-        await update.message.reply_text(
-            "Kullanım: /bel 118"
-        )
-        return
-
     try:
         value = float(context.args[0].replace(",", "."))
-
-        if not 40 <= value <= 250:
-            raise ValueError
-
         user_id = get_or_create_user(update.effective_user)
 
-        (
-            supabase
-            .table("measurements")
-            .insert({
-                "user_id": user_id,
-                "measurement_date": today(),
-                "waist_cm": value
-            })
-            .execute()
-        )
+        supabase.table("measurements").insert({
+            "user_id": user_id,
+            "measurement_date": today(),
+            "waist_cm": value
+        }).execute()
 
         await update.message.reply_text(
-            f"✅ Bel çevresi {value:g} cm olarak kaydedildi."
+            f"✅ Bel: {value:g} cm kaydedildi."
         )
 
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ Örnek kullanım: /bel 118"
-        )
+    except (ValueError, IndexError):
+        await update.message.reply_text("⚠️ Kullanım: /bel 118")
 
 
 async def gogus_command(update: Update, context):
-    if not context.args:
-        await update.message.reply_text(
-            "Kullanım: /gogus 125"
-        )
-        return
-
     try:
         value = float(context.args[0].replace(",", "."))
-
-        if not 40 <= value <= 250:
-            raise ValueError
-
         user_id = get_or_create_user(update.effective_user)
 
-        (
-            supabase
-            .table("measurements")
-            .insert({
-                "user_id": user_id,
-                "measurement_date": today(),
-                "chest_cm": value
-            })
-            .execute()
-        )
+        supabase.table("measurements").insert({
+            "user_id": user_id,
+            "measurement_date": today(),
+            "chest_cm": value
+        }).execute()
 
         await update.message.reply_text(
-            f"✅ Göğüs çevresi {value:g} cm olarak kaydedildi."
+            f"✅ Göğüs: {value:g} cm kaydedildi."
         )
 
-    except ValueError:
-        await update.message.reply_text(
-            "⚠️ Örnek kullanım: /gogus 125"
-        )
+    except (ValueError, IndexError):
+        await update.message.reply_text("⚠️ Kullanım: /gogus 125")
 
-
-# =========================================
-# ANTRENMAN
-# =========================================
 
 async def antrenman_command(update: Update, context):
-    if len(context.args) < 2:
-        await update.message.reply_text(
-            "Kullanım:\n"
-            "/antrenman Push 60\n\n"
-            "İlk değer antrenman türü,\n"
-            "ikinci değer dakika."
-        )
-        return
-
     try:
         workout_type = context.args[0]
         duration = int(context.args[1])
 
-        if not 1 <= duration <= 600:
-            raise ValueError
-
         user_id = get_or_create_user(update.effective_user)
 
-        (
-            supabase
-            .table("workouts")
-            .insert({
-                "user_id": user_id,
-                "workout_date": today(),
-                "workout_type": workout_type,
-                "duration_minutes": duration
-            })
-            .execute()
-        )
+        supabase.table("workouts").insert({
+            "user_id": user_id,
+            "workout_date": today(),
+            "workout_type": workout_type,
+            "duration_minutes": duration
+        }).execute()
 
         await update.message.reply_text(
-            "✅ Antrenman kaydedildi.\n\n"
-            f"🏋️ Tür: {workout_type}\n"
-            f"⏱ Süre: {duration} dk"
+            f"✅ {workout_type} - {duration} dk kaydedildi."
         )
 
-    except ValueError:
+    except (ValueError, IndexError):
         await update.message.reply_text(
-            "⚠️ Örnek kullanım: /antrenman Push 60"
+            "⚠️ Kullanım: /antrenman Push 60"
         )
 
 
-# =========================================
-# BUGÜN ÖZETİ
-# =========================================
+async def hedef_command(update: Update, context):
+    try:
+        user_id = get_or_create_user(update.effective_user)
+        g = get_goals(user_id)
+
+        await update.message.reply_text(
+            "🎯 GÜNLÜK HEDEFLER\n\n"
+            f"⚖️ Hedef kilo: {g.get('target_weight_kg', '—')} kg\n"
+            f"🔥 Kalori: {g.get('daily_calories', '—')} kcal\n"
+            f"🥩 Protein: {g.get('daily_protein_g', '—')} g\n"
+            f"💧 Su: {g.get('daily_water_l', '—')} L\n"
+            f"🚶 Adım: {g.get('daily_steps', '—')}"
+        )
+
+    except Exception as e:
+        print("HEDEF ERROR:", e)
+        await update.message.reply_text("🔴 Hedefler okunamadı.")
+
 
 async def bugun_command(update: Update, context):
     try:
         user_id = get_or_create_user(update.effective_user)
 
         daily = get_daily_log(user_id)
+        data = daily.data[0] if daily.data else {}
 
-        if daily.data:
-            data = daily.data[0]
-        else:
-            data = {}
-
-        measurement = (
-            supabase
-            .table("measurements")
-            .select("waist_cm,chest_cm")
-            .eq("user_id", user_id)
-            .order("measurement_date", desc=True)
-            .limit(1)
-            .execute()
-        )
-
-        m = measurement.data[0] if measurement.data else {}
+        g = get_goals(user_id)
 
         workouts = (
-            supabase
-            .table("workouts")
+            supabase.table("workouts")
             .select("workout_type,duration_minutes")
             .eq("user_id", user_id)
             .eq("workout_date", today())
             .execute()
         )
 
-        if workouts.data:
-            workout_text = "\n".join(
-                [
-                    f"🏋️ {w['workout_type']} - "
-                    f"{w['duration_minutes']} dk"
-                    for w in workouts.data
-                ]
-            )
-        else:
-            workout_text = "🏋️ Antrenman: —"
+        workout_text = "—"
 
-        def show(value, suffix=""):
-            if value is None:
-                return "—"
-            return f"{value}{suffix}"
+        if workouts.data:
+            workout_text = ", ".join(
+                f"{x['workout_type']} {x['duration_minutes']} dk"
+                for x in workouts.data
+            )
 
         await update.message.reply_text(
             "📊 BUGÜNKÜ DURUM\n\n"
-            f"⚖️ Kilo: {show(data.get('weight_kg'), ' kg')}\n"
-            f"🔥 Kalori: {show(data.get('calories'), ' kcal')}\n"
-            f"🥩 Protein: {show(data.get('protein_g'), ' g')}\n"
-            f"💧 Su: {show(data.get('water_l'), ' L')}\n"
-            f"🚶 Adım: {show(data.get('steps'))}\n\n"
-            f"📏 Bel: {show(m.get('waist_cm'), ' cm')}\n"
-            f"🫁 Göğüs: {show(m.get('chest_cm'), ' cm')}\n\n"
-            f"{workout_text}\n\n"
-            "━━━━━━━━━━━━━━\n"
-            "Takibe devam. 💪"
+            f"⚖️ Kilo: {data.get('weight_kg', '—')} kg\n"
+            f"🔥 Kalori: {data.get('calories', '—')} / "
+            f"{g.get('daily_calories', '—')} kcal\n"
+            f"🥩 Protein: {data.get('protein_g', '—')} / "
+            f"{g.get('daily_protein_g', '—')} g\n"
+            f"💧 Su: {data.get('water_l', '—')} / "
+            f"{g.get('daily_water_l', '—')} L\n"
+            f"🚶 Adım: {data.get('steps', '—')} / "
+            f"{g.get('daily_steps', '—')}\n"
+            f"🏋️ Antrenman: {workout_text}\n\n"
+            f"🎯 Hedef kilo: {g.get('target_weight_kg', '—')} kg"
         )
 
     except Exception as e:
         print("BUGUN ERROR:", e)
-
         await update.message.reply_text(
             "🔴 Günlük bilgiler alınırken hata oluştu."
         )
 
 
-# =========================================
-# HANDLER'LAR
-# =========================================
+async def hafta_command(update: Update, context):
+    try:
+        user_id = get_or_create_user(update.effective_user)
+
+        result = (
+            supabase.table("daily_logs")
+            .select("log_date,weight_kg")
+            .eq("user_id", user_id)
+            .not_.is_("weight_kg", "null")
+            .order("log_date", desc=True)
+            .limit(7)
+            .execute()
+        )
+
+        if not result.data:
+            await update.message.reply_text(
+                "📈 Henüz yeterli kilo kaydı yok."
+            )
+            return
+
+        rows = list(reversed(result.data))
+
+        lines = [
+            f"{x['log_date']} → {x['weight_kg']} kg"
+            for x in rows
+        ]
+
+        difference = None
+
+        if len(rows) >= 2:
+            difference = float(rows[-1]["weight_kg"]) - float(
+                rows[0]["weight_kg"]
+            )
+
+        text = "📈 SON KİLO KAYITLARI\n\n" + "\n".join(lines)
+
+        if difference is not None:
+            sign = "+" if difference > 0 else ""
+            text += (
+                f"\n\n⚖️ Değişim: {sign}{difference:.1f} kg"
+            )
+
+        await update.message.reply_text(text)
+
+    except Exception as e:
+        print("HAFTA ERROR:", e)
+        await update.message.reply_text(
+            "🔴 Haftalık rapor oluşturulamadı."
+        )
+
 
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("help", help_command))
@@ -517,22 +414,16 @@ telegram_app.add_handler(CommandHandler("kalori", kalori_command))
 telegram_app.add_handler(CommandHandler("protein", protein_command))
 telegram_app.add_handler(CommandHandler("su", su_command))
 telegram_app.add_handler(CommandHandler("adim", adim_command))
-
 telegram_app.add_handler(CommandHandler("bel", bel_command))
 telegram_app.add_handler(CommandHandler("gogus", gogus_command))
-
 telegram_app.add_handler(
     CommandHandler("antrenman", antrenman_command)
 )
 
-telegram_app.add_handler(
-    CommandHandler("bugun", bugun_command)
-)
+telegram_app.add_handler(CommandHandler("hedef", hedef_command))
+telegram_app.add_handler(CommandHandler("bugun", bugun_command))
+telegram_app.add_handler(CommandHandler("hafta", hafta_command))
 
-
-# =========================================
-# BOT BAŞLATMA
-# =========================================
 
 @app.on_event("startup")
 async def startup():
